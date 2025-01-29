@@ -416,7 +416,7 @@ const renderT = (template, data) => {
 }
 
 const renderTemplate = (directoryPath, indexPath, renderedIndexPath) => {
-    JSDOM.fromFile(indexPath)
+    return JSDOM.fromFile(indexPath)
         .then(dom => {
             const document = dom.window.document;
 
@@ -427,6 +427,7 @@ const renderTemplate = (directoryPath, indexPath, renderedIndexPath) => {
             const bodyElement = document.getElementsByTagName("body")[0];
             const headElement = document.getElementsByTagName("head")[0];
 
+            // Add squeeze script
             const additionalScriptElement = document.createElement("script");
 
             // additionalScriptElement.src = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/squeeze.js`;
@@ -447,70 +448,55 @@ const renderTemplate = (directoryPath, indexPath, renderedIndexPath) => {
             // ---
 
             if (showOverlayImage && fs.existsSync(`${directoryPath}/img/template-overlay.png`)) {
-
-                const additionalScriptElement3 = document.createElement("script");
-
-                additionalScriptElement3.text = Object.keys(overlaySize).map(key => {
+                // Add overlay script with settings
+                const overlaySettingsScript = document.createElement("script");
+                overlaySettingsScript.text = Object.keys(overlaySize).map(key => {
                     const value = (typeof overlaySize[key] === "undefined") ? `${overlaySize[key]}` : `"${overlaySize[key]}"`;
                     return `const ${key} = ${value};`
                 }).join("\n");
-                bodyElement.appendChild(additionalScriptElement3);
+                bodyElement.appendChild(overlaySettingsScript);
 
-                const additionalDivElement = document.createElement("div");
-                additionalDivElement.id= "editor-overlay";
-                additionalDivElement.innerHTML = '<div class="resize-handle"></div>';
+                // Add overlay div
+                const overlayDiv = document.createElement("div");
+                overlayDiv.id = "editor-overlay";
+                overlayDiv.innerHTML = '<div class="resize-handle"></div>';
+                bodyElement.appendChild(overlayDiv);
 
-                bodyElement.appendChild(additionalDivElement);
+                // Add overlay script
+                const overlayScript = document.createElement("script");
+                overlayScript.src = `${__dirname}/overlay.js`;
+                bodyElement.appendChild(overlayScript);
 
-                // ---
-
-                const additionalScriptElement2 = document.createElement("script");
-
-                additionalScriptElement2.src = `${__dirname}/overlay.js`;
-                // additionalScriptElement2.src = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/overlay.js`;
-
-                bodyElement.appendChild(additionalScriptElement2);
-
-                // ---
-
-                const additionalStyleElement = document.createElement("link");
-
-                additionalStyleElement.rel = "stylesheet";
-                additionalStyleElement.href = `${__dirname}/overlay.css`;
-                // additionalStyleElement.href = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/overlay.css`;
-
-                headElement.appendChild(additionalStyleElement);
+                // Add overlay styles
+                const overlayStyles = document.createElement("link");
+                overlayStyles.rel = "stylesheet";
+                overlayStyles.href = `${__dirname}/overlay.css`;
+                headElement.appendChild(overlayStyles);
             }
 
-            /////// ADD SCRIPTS END
-
-            readTestData(directoryPath)
-                .then(result => {
-                    if (!!result.error) {
-                        return {};
-                    }
-                    return result.data;
-                })
+            return readTestData(directoryPath)
+                .then(result => result.error ? {} : result.data)
                 .then(testData => {
                     const renderedContent = renderT(dom.serialize(), testData);
-                    if (!!renderedContent) {
-                        writeRenderedHtml(renderedIndexPath, renderedContent);
+                    if (!renderedContent) {
+                        throw new Error('Failed to render template');
                     }
+                    return writeRenderedHtml(renderedIndexPath, renderedContent);
                 });
+        })
+        .then(() => {
+            mainWindow.loadFile(renderedIndexPath);
+        })
+        .catch(err => {
+            console.error('Error rendering template:', err);
+            dialog.showErrorBox('Render Error', `Failed to render template: ${err.message}`);
+            throw err; // Re-throw to let caller handle if needed
         });
-}
+};
 
 const writeRenderedHtml = (renderedIndexPath, renderedContent) => {
-    fs.writeFile(renderedIndexPath, renderedContent, err => {
-        if (err) {
-            console.error(err);
-        } else {
-            // file written successfully
-            mainWindow.loadFile(renderedIndexPath); // Load the index.html file
-            // console.log(`Loaded: ${renderedIndexPath}`);
-        }
-    });
-}
+    return fs.promises.writeFile(renderedIndexPath, renderedContent);
+};
 
 const watchDirectory = (selectedDir, indexPath, renderedIndexPath) => {
 
