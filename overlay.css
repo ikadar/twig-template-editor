@@ -1,0 +1,25 @@
+#editor-overlay {
+    display: block;
+    position: absolute;
+    background-color: darkgray;
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.3;
+    z-index: 999;
+    top: 0;
+    left: 0;
+    width: 207px;
+    height: 275px;
+    cursor: grab;
+}
+
+#editor-overlay .resize-handle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background-color: darkgray;
+    bottom: 0;
+    right: 0;
+    cursor: se-resize;
+}
