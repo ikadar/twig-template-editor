@@ -16,7 +16,7 @@ const fetch = require('node-fetch');
 const { exec } = require('child_process');
 
 const CONFIG = {
-    MAX_RECENT_FILES: 15,
+    MAX_RECENT_FILES: 5,
     DEFAULT_OVERLAY_OPACITY: 0.3,
     WINDOW_DEFAULTS: {
         width: 1200,
@@ -318,23 +318,20 @@ const createInitialAppMenuTemplate = () => {
     return menuTemplate;
 }
 
-selectDirectory = async () => {
-    // console.log("OPENING DIRECTORY");
-
+const selectDirectory = () => {
     dialog
         .showOpenDialog(mainWindow, {
             properties: ["openDirectory"],
         })
-        .then(async (result) => {
-
+        .then((result) => {
             if (!result.canceled) {
-
                 const selectedDir = result.filePaths[0];
-
-                openDirectory(selectedDir);
+                return openDirectory(selectedDir);  // Return the Promise
             }
         })
-
+        .catch(err => {
+            console.error('Error selecting directory:', err);
+        });
 }
 
 const openDirectory = async (selectedDir) => {
@@ -357,17 +354,18 @@ const openDirectory = async (selectedDir) => {
     await testFiles.readTestDataFiles(selectedDir);
     await refreshTestMenu(selectedDir, indexPath, renderedIndexPath);
 
-    addRecentPath(selectedDir);
+    addRecentPath(selectedDir)
+        .then(() => {
+            renderTemplate(selectedDir, indexPath, renderedIndexPath);
+            if (!!watcher) {
+                console.log('Stopping the watcher...');
+                watcher.close();
+            }
+            watcher = watchDirectory(selectedDir, indexPath, renderedIndexPath);
 
-    renderTemplate(selectedDir, indexPath, renderedIndexPath);
-    if (!!watcher) {
-        console.log('Stopping the watcher...');
-        watcher.close();
-    }
-    watcher = watchDirectory(selectedDir, indexPath, renderedIndexPath);
-
-    hasOverlayImage = fs.existsSync(`${selectedDir}/img/template-overlay.png`)
-    refreshViewMenu(selectedDir, indexPath, renderedIndexPath);
+            hasOverlayImage = fs.existsSync(`${selectedDir}/img/template-overlay.png`)
+            refreshViewMenu(selectedDir, indexPath, renderedIndexPath);
+        });
 }
 
 const readTestData = async (directoryPath) => {
@@ -596,38 +594,38 @@ const refreshTestMenu = async (templateDir, indexPath, renderedIndexPath) => {
 }
 
 const refreshOpenRecentMenu = () => {
-
-    const recentFiles = loadRecentFiles();
-
-    const newAppMenuTemplate = appMenuTemplate.map(mainMenuItem => {
-        if (mainMenuItem.label === "File") {
-            return {
-                label: "File",
-                submenu: mainMenuItem.submenu.map(submenuItem => {
-                    if (submenuItem.label === "Open recent") {
-                        return {
-                            label: submenuItem.label,
-                            submenu: recentFiles.map(file => {
+    loadRecentFiles()
+        .then(recentFiles => {
+            const newAppMenuTemplate = appMenuTemplate.map(mainMenuItem => {
+                if (mainMenuItem.label === "File") {
+                    return {
+                        label: "File",
+                        submenu: mainMenuItem.submenu.map(submenuItem => {
+                            if (submenuItem.label === "Open recent") {
                                 return {
-                                    label: file,
-                                    click: (menuItem, browserWindow) => {
-                                        // console.log(menuItem.label);
-                                        openDirectory(menuItem.label);
-                                    }
+                                    label: submenuItem.label,
+                                    submenu: recentFiles.map(file => {
+                                        return {
+                                            label: file,
+                                            click: (menuItem, browserWindow) => {
+                                                openDirectory(menuItem.label);
+                                            }
+                                        }
+                                    })
                                 }
-                            })
-                        }
+                            }
+                            return submenuItem;
+                        })
                     }
-                    return submenuItem;
-                })
-            }
-        }
-        // console.log(mainMenuItem);
-        return mainMenuItem;
-    });
+                }
+                return mainMenuItem;
+            });
 
-    createAppMenu(newAppMenuTemplate);
-
+            createAppMenu(newAppMenuTemplate);
+        })
+        .catch(err => {
+            console.error('Error refreshing recent menu:', err);
+        });
 }
 
 const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
@@ -758,54 +756,39 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
 }
 
 const loadRecentFiles = () => {
-
     const recentFilesPath = path.join(app.getPath('userData'), 'recent-files.json');
-    const recentFilesPathExists = fs.existsSync(recentFilesPath);
-    let recentFiles = [];
-
-    if (recentFilesPathExists === false) {
-
-        fs.writeFile(recentFilesPath, JSON.stringify(recentFiles), err => {
-            if (err) {
-                console.error(err);
-            } else {
-                // file written successfully
-                // console.log(`Loaded: ${recentFilesPath}`);
-                return recentFiles;
-            }
-        });
-
-    } else {
-
-        const content = fs.readFileSync(`${recentFilesPath}`, 'utf8');
-
-        const recentFiles = JSON.parse(content); // Parse the JSON content
-        return recentFiles;
+    
+    try {
+        return fs.promises.access(recentFilesPath)
+            .then(() => fs.promises.readFile(recentFilesPath, 'utf8'))
+            .then(content => JSON.parse(content))
+            .catch(() => {
+                // File doesn't exist or error reading, create new file
+                const emptyList = [];
+                return fs.promises.writeFile(recentFilesPath, JSON.stringify(emptyList))
+                    .then(() => emptyList);
+            });
+    } catch (err) {
+        console.error('Error loading recent files:', err);
+        return [];
     }
 }
 
-const addRecentPath = async (dirPath) => {
+const addRecentPath = (dirPath) => {
     const recentFilesPath = path.join(app.getPath('userData'), 'recent-files.json');
-    let recentFiles = loadRecentFiles();
-    recentFiles.push(dirPath);
-
-    // Make the array unique
-    const uniqueRecentFiles = [...new Set(recentFiles)];
-
-    recentFiles = uniqueRecentFiles.slice(-CONFIG.MAX_RECENT_FILES);
-    // console.log(recentFiles);
-
-
-    fs.writeFile(recentFilesPath, JSON.stringify(recentFiles), err => {
-        if (err) {
-            console.error(err);
-        } else {
-            // file written successfully
-            refreshOpenRecentMenu();
-            return recentFiles;
-        }
-    });
-
+    
+    return loadRecentFiles()  // Return the Promise chain
+        .then(recentFiles => {
+            recentFiles.unshift(dirPath);
+            const uniqueRecentFiles = [...new Set(recentFiles)];
+            const trimmedFiles = uniqueRecentFiles.slice(0, CONFIG.MAX_RECENT_FILES);
+            
+            return fs.promises.writeFile(recentFilesPath, JSON.stringify(trimmedFiles))
+                .then(() => refreshOpenRecentMenu());
+        })
+        .catch(err => {
+            console.error('Error adding recent path:', err);
+        });
 }
 
 
