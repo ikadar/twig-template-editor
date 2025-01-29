@@ -15,6 +15,15 @@ const chokidar = require('chokidar');
 const fetch = require('node-fetch');
 const { exec } = require('child_process');
 
+const CONFIG = {
+    MAX_RECENT_FILES: 15,
+    DEFAULT_OVERLAY_OPACITY: 0.3,
+    WINDOW_DEFAULTS: {
+        width: 1200,
+        height: 900
+    }
+}
+
 let watcher;
 let isDirectoryOpen = false;
 let hasOverlayImage = false;
@@ -33,7 +42,7 @@ let overlaySize = {
     overlayTop: undefined,
     overlayWidth: undefined,
     overlayHeight: undefined,
-    overlayOpacity: 0.3
+    overlayOpacity: CONFIG.DEFAULT_OVERLAY_OPACITY
 }
 
 let currentView = {
@@ -96,8 +105,8 @@ app.on('ready', () => {
         latestTag = lt;
 
         mainWindow = new BrowserWindow({
-            width: 1200,
-            height: 900,
+            width: CONFIG.WINDOW_DEFAULTS.width,
+            height: CONFIG.WINDOW_DEFAULTS.height,
             webPreferences: {
                 preload: `${__dirname}/preload.js`,
                 nodeIntegration: true,
@@ -123,12 +132,18 @@ app.on('ready', () => {
 
 });
 
-app.on('window-all-closed', () => {
-    // if (process.platform !== 'darwin') {
-    console.log('Stopping the watcher...');
-    watcher.close();
-    app.quit();
-    // }
+app.on('window-all-closed', async () => {
+    try {
+        console.log('Stopping the watcher...');
+        if (watcher) {
+            await watcher.close();
+        }
+        // Clear any other resources
+        mainWindow = null;
+        app.quit();
+    } catch (err) {
+        console.error('Error during cleanup:', err);
+    }
 });
 
 app.on('activate', () => {
@@ -777,7 +792,7 @@ const addRecentPath = async (dirPath) => {
     // Make the array unique
     const uniqueRecentFiles = [...new Set(recentFiles)];
 
-    recentFiles = uniqueRecentFiles.slice(-15);
+    recentFiles = uniqueRecentFiles.slice(-CONFIG.MAX_RECENT_FILES);
     // console.log(recentFiles);
 
 
