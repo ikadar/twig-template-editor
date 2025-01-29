@@ -174,40 +174,39 @@ const createAppMenu = (menuTemplate) => {
 }
 
 const createInitialAppMenuTemplate = () => {
-
     let menuTemplate = [
         {
+            id: 'fileMenu',
             label: "File",
-            //accelerator: 'CmdorCtrl+F',
             submenu: [
                 {
+                    id: 'openDirectory',
                     label: "Open Directory",
-                    click: selectDirectory, // Open directory function
+                    click: selectDirectory,
                     accelerator: 'CmdOrCtrl+O',
                 },
                 {
+                    id: 'openRecent',
                     label: "Open recent",
                     submenu: []
-                    // submenu: recentFiles.map(item => {
-                    //     return {
-                    //         label: item
-                    //     }
-                    // })
                 },
             ],
         },
         {
+            id: 'viewMenu',
             label: 'View',
             submenu: [
                 {
+                    id: 'view.reload',
                     label: 'Reload',
                     enabled: isDirectoryOpen,
                     accelerator: 'CmdOrCtrl+R',
                     role: "reload"
                 },
                 {
+                    id: 'view.toggleDevTools',
                     label: 'Toggle DevTools',
-                    accelerator: 'CmdOrCtrl+Alt+I', // Shortcut for Windows/Linux
+                    accelerator: 'CmdOrCtrl+Alt+I',
                     click: (menuItem, browserWindow) => {
                         if (browserWindow) browserWindow.webContents.toggleDevTools();
                     },
@@ -216,35 +215,41 @@ const createInitialAppMenuTemplate = () => {
                     type: "separator"
                 },
                 {
+                    id: 'toggleOverlay',
                     label: 'Toggle overlay',
-                    accelerator: 'CmdOrCtrl+Alt+V', // Shortcut for Windows/Linux
+                    accelerator: 'CmdOrCtrl+Alt+V',
                     enabled: isDirectoryOpen,
                     click: (menuItem, browserWindow) => {
                         console.log(menuItem.label);
                     },
                 },
                 {
+                    id: 'increaseOverlayOpacity',
                     label: 'Increase overlay opacity',
-                    accelerator: 'CmdOrCtrl+Alt+P', // Shortcut for Windows/Linux
+                    accelerator: 'CmdOrCtrl+Alt+P',
                     enabled: isDirectoryOpen,
                 },
                 {
+                    id: 'decreaseOverlayOpacity',
                     label: 'Decrease overlay opacity',
-                    accelerator: 'CmdOrCtrl+Alt+O', // Shortcut for Windows/Linux
+                    accelerator: 'CmdOrCtrl+Alt+O',
                     enabled: isDirectoryOpen,
                 },
                 {
                     type: "separator"
                 },
                 {
+                    id: 'zoomIn',
                     role: "zoomIn",
                     enabled: isDirectoryOpen,
                 },
                 {
+                    id: 'zoomOut',
                     role: "zoomOut",
                     enabled: isDirectoryOpen,
                 },
                 {
+                    id: 'resetZoom',
                     role: "resetZoom",
                     enabled: isDirectoryOpen,
                 },
@@ -252,6 +257,7 @@ const createInitialAppMenuTemplate = () => {
                     type: "separator"
                 },
                 {
+                    id: 'mediaScreen',
                     label: 'Media: screen',
                     enabled: false,
                     click: (menuItem, browserWindow) => {
@@ -259,6 +265,7 @@ const createInitialAppMenuTemplate = () => {
                     },
                 },
                 {
+                    id: 'mediaPrint',
                     label: 'Media: print',
                     enabled: false,
                     click: (menuItem, browserWindow) => {
@@ -269,6 +276,7 @@ const createInitialAppMenuTemplate = () => {
                     type: "separator"
                 },
                 {
+                    id: 'showPdf',
                     label: 'Show PDF',
                     enabled: isDirectoryOpen && currentView.value !== "PDF",
                     click: (menuItem, browserWindow) => {
@@ -276,6 +284,7 @@ const createInitialAppMenuTemplate = () => {
                     },
                 },
                 {
+                    id: 'showHtml',
                     label: 'Show HTML',
                     enabled: isDirectoryOpen && currentView.value !== "HTML",
                     click: (menuItem, browserWindow) => {
@@ -283,6 +292,7 @@ const createInitialAppMenuTemplate = () => {
                     },
                 },
                 {
+                    id: 'toggleView',
                     label: 'Toggle view',
                     enabled: isDirectoryOpen,
                     accelerator: 'CmdOrCtrl+Alt+T',
@@ -290,10 +300,10 @@ const createInitialAppMenuTemplate = () => {
                         console.log("TOGGLE");
                     },
                 },
-
             ],
         },
         {
+            id: 'testMenu',
             label: 'Test',
             submenu: [],
         },
@@ -301,17 +311,18 @@ const createInitialAppMenuTemplate = () => {
 
     if (process.platform === 'darwin') {
         menuTemplate.unshift({
+            id: 'appMenu',
             label: app.name,
             submenu: [
-                {role: 'about'},
+                {id: 'about', role: 'about'},
                 {type: 'separator'},
-                {role: 'services'},
+                {id: 'services', role: 'services'},
                 {type: 'separator'},
-                {role: 'hide'},
-                {role: 'hideothers'},
-                {role: 'unhide'},
+                {id: 'hide', role: 'hide'},
+                {id: 'hideOthers', role: 'hideothers'},
+                {id: 'unhide', role: 'unhide'},
                 {type: 'separator'},
-                {role: 'quit'},
+                {id: 'quit', role: 'quit'},
             ],
         });
     }
@@ -537,11 +548,13 @@ const refreshTestMenu = async (templateDir, indexPath, renderedIndexPath) => {
     try {
 
         const newAppMenuTemplate = appMenuTemplate.map(mainMenuItem => {
-            if (mainMenuItem.label === "Test") {
+            if (mainMenuItem.id === "testMenu") {
                 let menuItem = {
+                    id: "testMenu",
                     label: "Test",
                     submenu: testFiles.files.map(file => {
                         return {
+                            id: `test.${file}`,
                             label: file,
                             click: (menuItem) => {
                                 testFiles.selectTestFile(menuItem.label);
@@ -558,6 +571,7 @@ const refreshTestMenu = async (templateDir, indexPath, renderedIndexPath) => {
                 });
 
                 menuItem.submenu.push({
+                    id: 'toggleTest',
                     label: 'Toggle test',
                     enabled: isDirectoryOpen,
                     accelerator: 'CmdOrCtrl+Alt+M',
@@ -584,15 +598,18 @@ const refreshOpenRecentMenu = () => {
     loadRecentFiles()
         .then(recentFiles => {
             const newAppMenuTemplate = appMenuTemplate.map(mainMenuItem => {
-                if (mainMenuItem.label === "File") {
+                if (mainMenuItem.id === "fileMenu") {
                     return {
+                        id: "fileMenu",
                         label: "File",
                         submenu: mainMenuItem.submenu.map(submenuItem => {
-                            if (submenuItem.label === "Open recent") {
+                            if (submenuItem.id === "openRecent") {
                                 return {
+                                    id: submenuItem.id,
                                     label: submenuItem.label,
                                     submenu: recentFiles.map(file => {
                                         return {
+                                            id: `recent.${file}`,
                                             label: file,
                                             click: (menuItem, browserWindow) => {
                                                 openDirectory(menuItem.label);
@@ -618,19 +635,22 @@ const refreshOpenRecentMenu = () => {
 const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
 
     const newAppMenuTemplate = appMenuTemplate.map(mainMenuItem => {
-        if (mainMenuItem.label === "View") {
+        if (mainMenuItem.id === "viewMenu") {
             return {
+                id: "viewMenu",
                 label: 'View',
                 submenu: [
                     {
+                        id: 'view.reload',
                         label: 'Reload',
                         enabled: isDirectoryOpen,
                         accelerator: 'CmdOrCtrl+R',
                         role: "reload"
                     },
                     {
+                        id: 'view.toggleDevTools',
                         label: 'Toggle DevTools',
-                        accelerator: 'CmdOrCtrl+Alt+I', // Shortcut for Windows/Linux
+                        accelerator: 'CmdOrCtrl+Alt+I',
                         click: (menuItem, browserWindow) => {
                             if (browserWindow) browserWindow.webContents.toggleDevTools();
                         },
@@ -639,8 +659,9 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         type: "separator"
                     },
                     {
+                        id: 'toggleOverlay',
                         label: 'Toggle overlay',
-                        accelerator: 'CmdOrCtrl+Alt+V', // Shortcut for Windows/Linux
+                        accelerator: 'CmdOrCtrl+Alt+V',
                         enabled: isDirectoryOpen && hasOverlayImage,
                         click: (menuItem, browserWindow) => {
                             showOverlayImage = !showOverlayImage;
@@ -648,8 +669,9 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         },
                     },
                     {
+                        id: 'increaseOverlayOpacity',
                         label: 'Increase overlay opacity',
-                        accelerator: 'CmdOrCtrl+Alt+P', // Shortcut for Windows/Linux
+                        accelerator: 'CmdOrCtrl+Alt+P',
                         enabled: isDirectoryOpen && hasOverlayImage,
                         click: (menuItem, browserWindow) => {
                             overlaySize.overlayOpacity += 0.1
@@ -658,8 +680,9 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         },
                     },
                     {
+                        id: 'decreaseOverlayOpacity',
                         label: 'Decrease overlay opacity',
-                        accelerator: 'CmdOrCtrl+Alt+O', // Shortcut for Windows/Linux
+                        accelerator: 'CmdOrCtrl+Alt+O',
                         enabled: isDirectoryOpen && hasOverlayImage,
                         click: (menuItem, browserWindow) => {
                             overlaySize.overlayOpacity -= 0.1
@@ -671,14 +694,17 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         type: "separator"
                     },
                     {
+                        id: 'zoomIn',
                         role: "zoomIn",
                         enabled: isDirectoryOpen,
                     },
                     {
+                        id: 'zoomOut',
                         role: "zoomOut",
                         enabled: isDirectoryOpen,
                     },
                     {
+                        id: 'resetZoom',
                         role: "resetZoom",
                         enabled: isDirectoryOpen,
                     },
@@ -686,6 +712,7 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         type: "separator"
                     },
                     {
+                        id: 'mediaScreen',
                         label: 'Media: screen',
                         enabled: false,
                         click: (menuItem, browserWindow) => {
@@ -693,6 +720,7 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         },
                     },
                     {
+                        id: 'mediaPrint',
                         label: 'Media: print',
                         enabled: false,
                         click: (menuItem, browserWindow) => {
@@ -703,6 +731,7 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         type: "separator"
                     },
                     {
+                        id: 'showPdf',
                         label: 'Show PDF',
                         enabled: isDirectoryOpen && currentView.value !== "PDF",
                         click: (menuItem, browserWindow) => {
@@ -713,6 +742,7 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         },
                     },
                     {
+                        id: 'showHtml',
                         label: 'Show HTML',
                         enabled: isDirectoryOpen && currentView.value !== "HTML",
                         click: (menuItem, browserWindow) => {
@@ -723,6 +753,7 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         },
                     },
                     {
+                        id: 'toggleView',
                         label: 'Toggle view',
                         enabled: isDirectoryOpen,
                         accelerator: 'CmdOrCtrl+Alt+T',
