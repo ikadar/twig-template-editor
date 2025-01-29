@@ -125,6 +125,7 @@ app.on('ready', () => {
         refreshOpenRecentMenu();
         // createAppMenu(appMenuTemplate);
 
+
     });
 
 
@@ -326,15 +327,16 @@ const selectDirectory = () => {
         .then((result) => {
             if (!result.canceled) {
                 const selectedDir = result.filePaths[0];
-                return openDirectory(selectedDir);  // Return the Promise
+                openDirectory(selectedDir);  // No return needed
             }
         })
         .catch(err => {
             console.error('Error selecting directory:', err);
+            dialog.showErrorBox('Error', 'Failed to open directory: ' + err.message);
         });
 }
 
-const openDirectory = async (selectedDir) => {
+const openDirectory = (selectedDir) => {
     const indexPath = path.join(selectedDir, "index.html");
     const renderedIndexPath = path.join(selectedDir, "__index.html");
 
@@ -351,10 +353,10 @@ const openDirectory = async (selectedDir) => {
     testFiles.selectedTestFile = null;
     testFiles.selectedTestFileIndex = null;
 
-    await testFiles.readTestDataFiles(selectedDir);
-    await refreshTestMenu(selectedDir, indexPath, renderedIndexPath);
-
-    addRecentPath(selectedDir)
+    // Start promise chain with readTestDataFiles
+    return testFiles.readTestDataFiles(selectedDir)
+        .then(() => refreshTestMenu(selectedDir, indexPath, renderedIndexPath))
+        .then(() => addRecentPath(selectedDir))
         .then(() => {
             renderTemplate(selectedDir, indexPath, renderedIndexPath);
             if (!!watcher) {
@@ -365,6 +367,10 @@ const openDirectory = async (selectedDir) => {
 
             hasOverlayImage = fs.existsSync(`${selectedDir}/img/template-overlay.png`)
             refreshViewMenu(selectedDir, indexPath, renderedIndexPath);
+        })
+        .catch(err => {
+            console.error('Error in openDirectory:', err);
+            dialog.showErrorBox('Error', 'Failed to open directory: ' + err.message);
         });
 }
 
