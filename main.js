@@ -16,7 +16,7 @@ const fetch = require('node-fetch');
 const { exec } = require('child_process');
 
 const CONFIG = {
-    MAX_RECENT_FILES: 5,
+    MAX_RECENT_FILES: 15,
     DEFAULT_OVERLAY_OPACITY: 0.3,
     WINDOW_DEFAULTS: {
         width: 1200,
@@ -368,20 +368,20 @@ const openDirectory = async (selectedDir) => {
         });
 }
 
-const readTestData = async (directoryPath) => {
-
+const readTestData = (directoryPath) => {
     if (!testFiles.selectedTestFile || (testFiles.selectedTestFile === "none")) {
-        return {error: null, data: {}};
+        return Promise.resolve({error: null, data: {}});
     }
 
-    try {
-        const content = fs.readFileSync(`${directoryPath}/test/${testFiles.selectedTestFile}`, 'utf8');
-        const parsedData = JSON.parse(content); // Parse the JSON content
-        return {error: null, data: parsedData};
-    } catch (err) {
-        return {error: err, data: null}; // Return the error in the first position of the array
-    }
-
+    return fs.promises.readFile(`${directoryPath}/test/${testFiles.selectedTestFile}`, 'utf8')
+        .then(content => ({
+            error: null,
+            data: JSON.parse(content)
+        }))
+        .catch(err => ({
+            error: err,
+            data: null
+        }));
 }
 
 const renderT = (template, data) => {
@@ -409,94 +409,89 @@ const renderT = (template, data) => {
     }
 }
 
-const renderTemplate = async (directoryPath, indexPath, renderedIndexPath) => {
+const renderTemplate = (directoryPath, indexPath, renderedIndexPath) => {
+    JSDOM.fromFile(indexPath)
+        .then(dom => {
+            const document = dom.window.document;
 
-    JSDOM.fromFile(indexPath).then(dom => {
+            /////// ADD SCRIPTS
 
-        const document = dom.window.document;
+            // Squeezing related script
 
-        /////// ADD SCRIPTS
+            const bodyElement = document.getElementsByTagName("body")[0];
+            const headElement = document.getElementsByTagName("head")[0];
 
-        // Squeezing related script
+            const additionalScriptElement = document.createElement("script");
 
-        const bodyElement = document.getElementsByTagName("body")[0];
-        const headElement = document.getElementsByTagName("head")[0];
+            // additionalScriptElement.src = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/squeeze.js`;
+            additionalScriptElement.src = `${__dirname}/squeeze.js`;
 
-        const additionalScriptElement = document.createElement("script");
+            bodyElement.appendChild(additionalScriptElement);
 
-        // additionalScriptElement.src = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/squeeze.js`;
-        additionalScriptElement.src = `${__dirname}/squeeze.js`;
+            ////////
 
-        bodyElement.appendChild(additionalScriptElement);
+            // const additionalScriptElement4 = document.createElement("script");
+            //
+            // additionalScriptElement4.src = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/squeeze.js`;
+            // additionalScriptElement4.src = `${__dirname}/squeeze-spacing.js`;
+            //
+            // bodyElement.appendChild(additionalScriptElement4);
 
-        ////////
-
-        // const additionalScriptElement4 = document.createElement("script");
-        //
-        // additionalScriptElement4.src = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/squeeze.js`;
-        // additionalScriptElement4.src = `${__dirname}/squeeze-spacing.js`;
-        //
-        // bodyElement.appendChild(additionalScriptElement4);
-
-        // Overlay realted scripts
-        // ---
-
-        if (showOverlayImage && fs.existsSync(`${directoryPath}/img/template-overlay.png`)) {
-
-            const additionalScriptElement3 = document.createElement("script");
-
-            additionalScriptElement3.text = Object.keys(overlaySize).map(key => {
-                const value = (typeof overlaySize[key] === "undefined") ? `${overlaySize[key]}` : `"${overlaySize[key]}"`;
-                return `const ${key} = ${value};`
-            }).join("\n");
-            bodyElement.appendChild(additionalScriptElement3);
-
-            const additionalDivElement = document.createElement("div");
-            additionalDivElement.id= "editor-overlay";
-            additionalDivElement.innerHTML = '<div class="resize-handle"></div>';
-
-            bodyElement.appendChild(additionalDivElement);
-
+            // Overlay realted scripts
             // ---
 
-            const additionalScriptElement2 = document.createElement("script");
+            if (showOverlayImage && fs.existsSync(`${directoryPath}/img/template-overlay.png`)) {
 
-            additionalScriptElement2.src = `${__dirname}/overlay.js`;
-            // additionalScriptElement2.src = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/overlay.js`;
+                const additionalScriptElement3 = document.createElement("script");
 
-            bodyElement.appendChild(additionalScriptElement2);
+                additionalScriptElement3.text = Object.keys(overlaySize).map(key => {
+                    const value = (typeof overlaySize[key] === "undefined") ? `${overlaySize[key]}` : `"${overlaySize[key]}"`;
+                    return `const ${key} = ${value};`
+                }).join("\n");
+                bodyElement.appendChild(additionalScriptElement3);
 
-            // ---
+                const additionalDivElement = document.createElement("div");
+                additionalDivElement.id= "editor-overlay";
+                additionalDivElement.innerHTML = '<div class="resize-handle"></div>';
 
-            const additionalStyleElement = document.createElement("link");
+                bodyElement.appendChild(additionalDivElement);
 
-            additionalStyleElement.rel = "stylesheet";
-            additionalStyleElement.href = `${__dirname}/overlay.css`;
-            // additionalStyleElement.href = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/overlay.css`;
+                // ---
 
-            headElement.appendChild(additionalStyleElement);
-        }
+                const additionalScriptElement2 = document.createElement("script");
 
-        /////// ADD SCRIPTS END
+                additionalScriptElement2.src = `${__dirname}/overlay.js`;
+                // additionalScriptElement2.src = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/overlay.js`;
 
-        readTestData(directoryPath)
+                bodyElement.appendChild(additionalScriptElement2);
 
-            .then((result) => {
-                if (!!result.error) {
-                    return {};
-                    // return Promise.resolve('Test data not found!');
-                }
-                return result.data;
-            })
+                // ---
 
-            .then((testData) => {
-                const renderedContent = renderT(dom.serialize(), testData);
-                if (!!renderedContent) {
-                    writeRenderedHtml(renderedIndexPath, renderedContent);
-                }
-            })
+                const additionalStyleElement = document.createElement("link");
 
-    });
+                additionalStyleElement.rel = "stylesheet";
+                additionalStyleElement.href = `${__dirname}/overlay.css`;
+                // additionalStyleElement.href = `https://cdn.jsdelivr.net/gh/ikadar/prince-scripts@${latestTag}/overlay.css`;
+
+                headElement.appendChild(additionalStyleElement);
+            }
+
+            /////// ADD SCRIPTS END
+
+            readTestData(directoryPath)
+                .then(result => {
+                    if (!!result.error) {
+                        return {};
+                    }
+                    return result.data;
+                })
+                .then(testData => {
+                    const renderedContent = renderT(dom.serialize(), testData);
+                    if (!!renderedContent) {
+                        writeRenderedHtml(renderedIndexPath, renderedContent);
+                    }
+                });
+        });
 }
 
 const writeRenderedHtml = (renderedIndexPath, renderedContent) => {
