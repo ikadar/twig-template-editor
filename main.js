@@ -14,7 +14,7 @@ const Twig = require('twig'); // Twig module
 const chokidar = require('chokidar');
 const fetch = require('node-fetch');
 const { exec } = require('child_process');
-const Template = require('./template');
+const Template = require('./src/template/template');
 
 const CONFIG = {
     MAX_RECENT_FILES: 15,
