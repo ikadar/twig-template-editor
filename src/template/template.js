@@ -5,6 +5,7 @@ const jsdom = require("jsdom");
 const { JSDOM } = jsdom;
 const Twig = require('twig');
 const { readdir } = require('fs/promises');
+const Overlay = require('./overlay');
 
 class Template {
     constructor(mainWindow) {
@@ -12,15 +13,7 @@ class Template {
         this.indexPath = null;
         this.renderedIndexPath = null;
         this.mainWindow = mainWindow;
-        this.hasOverlayImage = false;
-        this.showOverlayImage = false;
-        this.overlaySize = {
-            overlayLeft: undefined,
-            overlayTop: undefined,
-            overlayWidth: undefined,
-            overlayHeight: undefined,
-            overlayOpacity: 0.3  // Default opacity
-        };
+        this.overlay = new Overlay();
         this.testFiles = {
             files: ["none"],
             selectedTestFile: "none",
@@ -29,28 +22,27 @@ class Template {
     }
 
     updateOverlaySize(newValues) {
-        this.overlaySize = {...this.overlaySize, ...newValues};
+        this.overlay.updateSize(newValues);
     }
 
     increaseOverlayOpacity() {
-        this.overlaySize.overlayOpacity += 0.1;
-        this.overlaySize.overlayOpacity = Math.min(this.overlaySize.overlayOpacity, 1);
+        this.overlay.increaseOpacity();
     }
 
     decreaseOverlayOpacity() {
-        this.overlaySize.overlayOpacity -= 0.1;
-        this.overlaySize.overlayOpacity = Math.max(this.overlaySize.overlayOpacity, 0);
+        this.overlay.decreaseOpacity();
     }
 
-    // Add method to check for overlay image
     checkOverlayImage() {
-        this.hasOverlayImage = fs.existsSync(`${this.directoryPath}/img/template-overlay.png`);
-        return this.hasOverlayImage;
+        return this.overlay.checkImage(this.directoryPath);
     }
 
     toggleOverlay() {
-        this.showOverlayImage = !this.showOverlayImage && this.hasOverlayImage;
-        return this.showOverlayImage;
+        return this.overlay.toggle();
+    }
+
+    get hasOverlayImage() {
+        return this.overlay.hasOverlayImage;
     }
 
     async readTestDataFiles() {
@@ -97,39 +89,14 @@ class Template {
             .then(dom => {
                 const document = dom.window.document;
                 const bodyElement = document.getElementsByTagName("body")[0];
-                const headElement = document.getElementsByTagName("head")[0];
 
                 // Add squeeze script
                 const additionalScriptElement = document.createElement("script");
-                additionalScriptElement.src = `${__dirname}/squeeze.js`;
+                additionalScriptElement.src = `${__dirname}/static/squeeze.js`;
                 bodyElement.appendChild(additionalScriptElement);
 
-                if (this.showOverlayImage && this.hasOverlayImage) {
-                    // Add overlay script with settings
-                    const overlaySettingsScript = document.createElement("script");
-                    overlaySettingsScript.text = Object.keys(this.overlaySize).map(key => {
-                        const value = (typeof this.overlaySize[key] === "undefined") ? `${this.overlaySize[key]}` : `"${this.overlaySize[key]}"`;
-                        return `const ${key} = ${value};`
-                    }).join("\n");
-                    bodyElement.appendChild(overlaySettingsScript);
-
-                    // Add overlay div
-                    const overlayDiv = document.createElement("div");
-                    overlayDiv.id = "editor-overlay";
-                    overlayDiv.innerHTML = '<div class="resize-handle"></div>';
-                    bodyElement.appendChild(overlayDiv);
-
-                    // Add overlay script
-                    const overlayScript = document.createElement("script");
-                    overlayScript.src = `${__dirname}/overlay.js`;
-                    bodyElement.appendChild(overlayScript);
-
-                    // Add overlay styles
-                    const overlayStyles = document.createElement("link");
-                    overlayStyles.rel = "stylesheet";
-                    overlayStyles.href = `${__dirname}/overlay.css`;
-                    headElement.appendChild(overlayStyles);
-                }
+                // Use overlay's appendToDOM method
+                this.overlay.appendToDOM(document, __dirname);
 
                 return this.readTestData()
                     .then(result => result.error ? {} : result.data)
