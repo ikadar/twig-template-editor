@@ -4,12 +4,10 @@ const fs = require('fs');
 
 class AppMenu {
     constructor(app, template, config) {
-
         this.app = app;
         this.template = template;
         this.config = config;
         this.menuTemplate = null;
-        this.currentView = "HTML";
     }
 
     createInitialTemplate() {
@@ -183,20 +181,18 @@ class AppMenu {
             {
                 id: 'showPdf',
                 label: 'Show PDF',
-                enabled: this.template.isDirectoryOpen && this.currentView !== "PDF",
+                enabled: this.template.isDirectoryOpen && this.template.currentView !== "PDF",
                 click: (menuItem) => {
-                    this.currentView = "PDF";
-                    this.template.renderPdf();
+                    this.template.setView("PDF");
                     this.refreshViewMenu();
                 },
             },
             {
                 id: 'showHtml',
                 label: 'Show HTML',
-                enabled: this.template.isDirectoryOpen && this.currentView !== "HTML",
+                enabled: this.template.isDirectoryOpen && this.template.currentView !== "HTML",
                 click: (menuItem) => {
-                    this.currentView = "HTML";
-                    this.template.render();
+                    this.template.setView("HTML");
                     this.refreshViewMenu();
                 },
             },
@@ -206,13 +202,8 @@ class AppMenu {
                 enabled: this.template.isDirectoryOpen,
                 accelerator: 'CmdOrCtrl+Alt+T',
                 click: () => {
-                    this.currentView = (this.currentView === "HTML") ? "PDF" : "HTML";
+                    this.template.toggleView();
                     this.refreshViewMenu();
-                    if (this.currentView === "HTML") {
-                        this.template.render();
-                    } else {
-                        this.template.renderPdf();
-                    }
                 },
             },
         ];

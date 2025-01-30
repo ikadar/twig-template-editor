@@ -9,6 +9,8 @@ const TestData = require('./test-data');
 const chokidar = require('chokidar');
 const { exec } = require('child_process');
 const os = require('os');
+const fetch = require('node-fetch');
+const { ipcMain } = require('electron');
 
 class Template {
     constructor(mainWindow) {
@@ -19,6 +21,19 @@ class Template {
         this.overlay = new Overlay();
         this.testData = new TestData();
         this._isDirectoryOpen = false;
+        this._currentView = "HTML";
+        this.latestTag = null;
+
+        // Call getLatestTag immediately
+        this.getLatestTag("ikadar", "prince-scripts")
+            .catch(err => {
+                console.error('Error getting latest tag:', err);
+            });
+
+        // Set up IPC listener
+        ipcMain.on('send-value', (event, value) => {
+            this.updateOverlaySize(value);
+        });
     }
 
     updateOverlaySize(newValues) {
@@ -222,6 +237,37 @@ class Template {
             console.log(stdout.trim());
             this.mainWindow.loadFile(outputPath);
         });
+    }
+
+    get currentView() {
+        return this._currentView;
+    }
+
+    setView(view) {
+        this._currentView = view;
+        if (view === "HTML") {
+            this.render();
+        } else {
+            this.renderPdf();
+        }
+    }
+
+    toggleView() {
+        this.setView(this._currentView === "HTML" ? "PDF" : "HTML");
+    }
+
+    async getLatestTag(username, repo) {
+        const url = `https://api.github.com/repos/${username}/${repo}/tags`;
+        const response = await fetch(url);
+        const tags = await response.json();
+
+        if (tags.length > 0) {
+            this.latestTag = `v${tags[0].name}`;
+            return this.latestTag;
+        } else {
+            this.latestTag = null;
+            return null;
+        }
     }
 }
 

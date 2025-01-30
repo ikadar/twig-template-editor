@@ -29,8 +29,6 @@ const CONFIG = {
 let watcher;
 let isDirectoryOpen = false;
 
-let latestTag;
-
 app.commandLine.appendSwitch('disable-gpu-logging');
 app.commandLine.appendSwitch('log-level', '3'); // Suppresses INFO and WARNING logs
 
@@ -39,61 +37,25 @@ let mainWindow;
 let template;
 let appMenu;
 
-let currentView = {
-    _value: "HTML",
-    get value() {
-        return this._value;
-    },
-    set value(newValue) {
-        console.log(`View Variable changed: ${this._value} -> ${newValue}`);
-        this._value = newValue;
-        // Do something when the variable changes
-    },
-    toggle() {
-        this.value = (this._value === "HTML") ? "PDF" : "HTML";
-        appMenu.refreshViewMenu();
-        switch (this.value) {
-            case "HTML":
-                template.render();
-                break;
-            case "PDF":
-                renderPdf(template.renderedIndexPath);
-                break;
-        }
-        console.log(`Switching to ${this._value} view.`);
-    }
-};
-
-
 app.on('ready', () => {
-    (async () => {
-        return getLatestTag("ikadar", "prince-scripts");
-    })().then((lt) => {
-        latestTag = lt;
-
-        mainWindow = new BrowserWindow({
-            width: CONFIG.WINDOW_DEFAULTS.width,
-            height: CONFIG.WINDOW_DEFAULTS.height,
-            webPreferences: {
-                preload: `${__dirname}/preload.js`,
-                nodeIntegration: true,
-                contextIsolation: true,
-            }
-        });
-
-        template = new Template(mainWindow);
-        appMenu = new AppMenu(app, template, CONFIG);
-        template.setAppMenu(appMenu);
-        
-        mainWindow.loadFile('index.html');
-
-        ipcMain.on('send-value', (event, value) => {
-            template.updateOverlaySize(value);
-        });
-
-        appMenu.createInitialTemplate();
-        appMenu.refreshOpenRecentMenu();
+    mainWindow = new BrowserWindow({
+        width: CONFIG.WINDOW_DEFAULTS.width,
+        height: CONFIG.WINDOW_DEFAULTS.height,
+        webPreferences: {
+            preload: `${__dirname}/preload.js`,
+            nodeIntegration: true,
+            contextIsolation: true,
+        }
     });
+
+    template = new Template(mainWindow);
+    appMenu = new AppMenu(app, template, CONFIG);
+    template.setAppMenu(appMenu);
+    
+    mainWindow.loadFile('index.html');
+
+    appMenu.createInitialTemplate();
+    appMenu.refreshOpenRecentMenu();
 });
 
 app.on('window-all-closed', async () => {
@@ -122,28 +84,3 @@ process.on('SIGINT', () => {
     watcher.close();
     process.exit();
 });
-
-getLatestTag = async (username, repo) => {
-    const url = `https://api.github.com/repos/${username}/${repo}/tags`;
-    const response = await fetch(url);
-
-    const tags = await response.json();
-
-    if (tags.length > 0) {
-        return `v${tags[0].name}`;
-    } else {
-        return null;
-    }
-}
-
-renderPdf = (inputPath) => {
-    exec(`prince -v -j -o '${__dirname}/output.pdf' '${inputPath}'`, (error, stdout, stderr) => {
-        if (error) {
-            console.error('Prince XML is not installed or not in PATH.');
-            return;
-        }
-        console.log(stdout.trim());
-        mainWindow.loadFile('output.pdf');
-    });
-
-}
