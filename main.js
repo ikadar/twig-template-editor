@@ -14,6 +14,7 @@ const Twig = require('twig'); // Twig module
 const chokidar = require('chokidar');
 const fetch = require('node-fetch');
 const { exec } = require('child_process');
+const Template = require('./template');
 
 const CONFIG = {
     MAX_RECENT_FILES: 15,
@@ -72,103 +73,7 @@ let testFiles = {
     }
 }
 
-let template = {
-    directoryPath: null,
-    indexPath: null,
-    renderedIndexPath: null,
-
-    render() {
-        return JSDOM.fromFile(this.indexPath)
-            .then(dom => {
-                const document = dom.window.document;
-                const bodyElement = document.getElementsByTagName("body")[0];
-                const headElement = document.getElementsByTagName("head")[0];
-
-                // Add squeeze script
-                const additionalScriptElement = document.createElement("script");
-                additionalScriptElement.src = `${__dirname}/squeeze.js`;
-                bodyElement.appendChild(additionalScriptElement);
-
-                if (showOverlayImage && fs.existsSync(`${this.directoryPath}/img/template-overlay.png`)) {
-                    // Add overlay script with settings
-                    const overlaySettingsScript = document.createElement("script");
-                    overlaySettingsScript.text = Object.keys(overlaySize).map(key => {
-                        const value = (typeof overlaySize[key] === "undefined") ? `${overlaySize[key]}` : `"${overlaySize[key]}"`;
-                        return `const ${key} = ${value};`
-                    }).join("\n");
-                    bodyElement.appendChild(overlaySettingsScript);
-
-                    // Add overlay div
-                    const overlayDiv = document.createElement("div");
-                    overlayDiv.id = "editor-overlay";
-                    overlayDiv.innerHTML = '<div class="resize-handle"></div>';
-                    bodyElement.appendChild(overlayDiv);
-
-                    // Add overlay script
-                    const overlayScript = document.createElement("script");
-                    overlayScript.src = `${__dirname}/overlay.js`;
-                    bodyElement.appendChild(overlayScript);
-
-                    // Add overlay styles
-                    const overlayStyles = document.createElement("link");
-                    overlayStyles.rel = "stylesheet";
-                    overlayStyles.href = `${__dirname}/overlay.css`;
-                    headElement.appendChild(overlayStyles);
-                }
-
-                return readTestData()
-                    .then(result => result.error ? {} : result.data)
-                    .then(testData => {
-                        const renderedContent = this.renderTwig(dom.serialize(), testData);
-                        if (!renderedContent) {
-                            throw new Error('Failed to render template');
-                        }
-                        return this.writeRendered(renderedContent);
-                    });
-            })
-            .then(() => {
-                mainWindow.loadFile(this.renderedIndexPath);
-            })
-            .catch(err => {
-                console.error('Error rendering template:', err);
-                dialog.showErrorBox('Render Error', `Failed to render template: ${err.message}`);
-                throw err;
-            });
-    },
-
-    renderTwig(template, data) {
-        let twig;
-
-        // compile template
-        try {
-            twig = Twig.twig({
-                data: template,
-                rethrow: true
-            });
-        } catch (err) {
-            dialog.showErrorBox('Twig compile error', err.message);
-            return null;
-        }
-
-        // render template
-        try {
-            return twig.render(data);
-        } catch (err) {
-            dialog.showErrorBox('Twig compile error', err.message);
-            return null;
-        }
-    },
-
-    writeRendered(renderedContent) {
-        return fs.promises.writeFile(this.renderedIndexPath, renderedContent);
-    },
-
-    setDirectory(dirPath) {
-        this.directoryPath = dirPath;
-        this.indexPath = path.join(dirPath, "index.html");
-        this.renderedIndexPath = path.join(dirPath, "__index.html");
-    }
-};
+let template;
 
 let currentView = {
     _value: "HTML",
@@ -185,7 +90,7 @@ let currentView = {
         refreshViewMenu();
         switch (this.value) {
             case "HTML":
-                template.render();
+                template.render(showOverlayImage, overlaySize, readTestData);
                 break;
             case "PDF":
                 renderPdf(template.renderedIndexPath);
@@ -197,7 +102,6 @@ let currentView = {
 
 
 app.on('ready', () => {
-
     (async () => {
         return getLatestTag("ikadar", "prince-scripts");
     })().then((lt) => {
@@ -209,10 +113,12 @@ app.on('ready', () => {
             webPreferences: {
                 preload: `${__dirname}/preload.js`,
                 nodeIntegration: true,
-                contextIsolation: true, // Disable context isolation for simplicity
+                contextIsolation: true,
             }
         });
 
+        template = new Template(mainWindow);  // <-- Here's where Template is instantiated
+        
         mainWindow.loadFile('index.html');
 
         ipcMain.on('send-value', (event, value) => {
@@ -467,7 +373,7 @@ const createInitialAppMenuTemplate = () => {
                     accelerator: 'CmdOrCtrl+Alt+M',
                     click: (menuItem, browserWindow) => {
                         testFiles.toggleTestFile();
-                        template.render();
+                        template.render(showOverlayImage, overlaySize, readTestData);
                         console.log("TOGGLE TEST");
                     }
                 },
@@ -532,7 +438,7 @@ const openDirectory = (selectedDir) => {
         .then(() => refreshTestMenu())
         .then(() => addRecentPath(template.directoryPath))
         .then(() => {
-            template.render();
+            template.render(showOverlayImage, overlaySize, readTestData);
             if (!!watcher) {
                 console.log('Stopping the watcher...');
                 watcher.close();
@@ -580,7 +486,7 @@ const watchDirectory = (selectedDir) => {
 
     watcher
         .on('change', (path) => {
-            template.render();
+            template.render(showOverlayImage, overlaySize, readTestData);
         });
 
     return watcher;
@@ -597,7 +503,7 @@ const refreshTestMenu = async () => {
                 label: file,
                 click: (menuItem) => {
                     testFiles.selectTestFile(menuItem.label);
-                    template.render();
+                    template.render(showOverlayImage, overlaySize, readTestData);
                 }
             };
         });
@@ -691,7 +597,7 @@ const refreshViewMenu = () => {
                         enabled: isDirectoryOpen && hasOverlayImage,
                         click: (menuItem, browserWindow) => {
                             showOverlayImage = !showOverlayImage;
-                            template.render();
+                            template.render(showOverlayImage, overlaySize, readTestData);
                         },
                     },
                     {
@@ -702,7 +608,7 @@ const refreshViewMenu = () => {
                         click: (menuItem, browserWindow) => {
                             overlaySize.overlayOpacity += 0.1
                             overlaySize.overlayOpacity = Math.min(overlaySize.overlayOpacity, 1);
-                            template.render();
+                            template.render(showOverlayImage, overlaySize, readTestData);
                         },
                     },
                     {
@@ -713,7 +619,7 @@ const refreshViewMenu = () => {
                         click: (menuItem, browserWindow) => {
                             overlaySize.overlayOpacity -= 0.1
                             overlaySize.overlayOpacity = Math.max(overlaySize.overlayOpacity, 0);
-                            template.render();
+                            template.render(showOverlayImage, overlaySize, readTestData);
                         },
                     },
                     {
@@ -773,7 +679,7 @@ const refreshViewMenu = () => {
                         enabled: isDirectoryOpen && currentView.value !== "HTML",
                         click: (menuItem, browserWindow) => {
                             currentView.value = "HTML";
-                            template.render();
+                            template.render(showOverlayImage, overlaySize, readTestData);
                             refreshViewMenu();
                             console.log(menuItem.label);
                         },
