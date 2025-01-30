@@ -11,9 +11,22 @@ class Template {
         this.indexPath = null;
         this.renderedIndexPath = null;
         this.mainWindow = mainWindow;
+        this.hasOverlayImage = false;
+        this.showOverlayImage = false;
     }
 
-    render(showOverlayImage, overlaySize, readTestData) {
+    // Add method to check for overlay image
+    checkOverlayImage() {
+        this.hasOverlayImage = fs.existsSync(`${this.directoryPath}/img/template-overlay.png`);
+        return this.hasOverlayImage;
+    }
+
+    toggleOverlay() {
+        this.showOverlayImage = !this.showOverlayImage && this.hasOverlayImage;
+        return this.showOverlayImage;
+    }
+
+    render(overlaySize, readTestData) {
         return JSDOM.fromFile(this.indexPath)
             .then(dom => {
                 const document = dom.window.document;
@@ -25,7 +38,7 @@ class Template {
                 additionalScriptElement.src = `${__dirname}/squeeze.js`;
                 bodyElement.appendChild(additionalScriptElement);
 
-                if (showOverlayImage && fs.existsSync(`${this.directoryPath}/img/template-overlay.png`)) {
+                if (this.showOverlayImage && this.hasOverlayImage) {
                     // Add overlay script with settings
                     const overlaySettingsScript = document.createElement("script");
                     overlaySettingsScript.text = Object.keys(overlaySize).map(key => {

@@ -27,8 +27,6 @@ const CONFIG = {
 
 let watcher;
 let isDirectoryOpen = false;
-let hasOverlayImage = false;
-let showOverlayImage = false;
 
 let appMenuTemplate;
 
@@ -90,7 +88,7 @@ let currentView = {
         refreshViewMenu();
         switch (this.value) {
             case "HTML":
-                template.render(showOverlayImage, overlaySize, readTestData);
+                template.render(overlaySize, readTestData);
                 break;
             case "PDF":
                 renderPdf(template.renderedIndexPath);
@@ -373,7 +371,7 @@ const createInitialAppMenuTemplate = () => {
                     accelerator: 'CmdOrCtrl+Alt+M',
                     click: (menuItem, browserWindow) => {
                         testFiles.toggleTestFile();
-                        template.render(showOverlayImage, overlaySize, readTestData);
+                        template.render(overlaySize, readTestData);
                         console.log("TOGGLE TEST");
                     }
                 },
@@ -438,15 +436,15 @@ const openDirectory = (selectedDir) => {
         .then(() => refreshTestMenu())
         .then(() => addRecentPath(template.directoryPath))
         .then(() => {
-            template.render(showOverlayImage, overlaySize, readTestData);
+            template.checkOverlayImage(); // Check for overlay image
+            template.render(overlaySize, readTestData);
             if (!!watcher) {
                 console.log('Stopping the watcher...');
                 watcher.close();
             }
             watcher = watchDirectory(template.directoryPath, template.indexPath, template.renderedIndexPath);
 
-            hasOverlayImage = fs.existsSync(`${template.directoryPath}/img/template-overlay.png`)
-            refreshViewMenu(template.directoryPath, template.indexPath, template.renderedIndexPath);
+            refreshViewMenu();
         })
         .catch(err => {
             console.error('Error in openDirectory:', err);
@@ -486,7 +484,7 @@ const watchDirectory = (selectedDir) => {
 
     watcher
         .on('change', (path) => {
-            template.render(showOverlayImage, overlaySize, readTestData);
+            template.render(overlaySize, readTestData);
         });
 
     return watcher;
@@ -503,7 +501,7 @@ const refreshTestMenu = async () => {
                 label: file,
                 click: (menuItem) => {
                     testFiles.selectTestFile(menuItem.label);
-                    template.render(showOverlayImage, overlaySize, readTestData);
+                    template.render(overlaySize, readTestData);
                 }
             };
         });
@@ -594,32 +592,32 @@ const refreshViewMenu = () => {
                         id: 'toggleOverlay',
                         label: 'Toggle overlay',
                         accelerator: 'CmdOrCtrl+Alt+V',
-                        enabled: isDirectoryOpen && hasOverlayImage,
+                        enabled: isDirectoryOpen && template.hasOverlayImage,
                         click: (menuItem, browserWindow) => {
-                            showOverlayImage = !showOverlayImage;
-                            template.render(showOverlayImage, overlaySize, readTestData);
+                            template.toggleOverlay();
+                            template.render(overlaySize, readTestData);
                         },
                     },
                     {
                         id: 'increaseOverlayOpacity',
                         label: 'Increase overlay opacity',
                         accelerator: 'CmdOrCtrl+Alt+P',
-                        enabled: isDirectoryOpen && hasOverlayImage,
+                        enabled: isDirectoryOpen && template.hasOverlayImage,
                         click: (menuItem, browserWindow) => {
-                            overlaySize.overlayOpacity += 0.1
+                            overlaySize.overlayOpacity += 0.1;
                             overlaySize.overlayOpacity = Math.min(overlaySize.overlayOpacity, 1);
-                            template.render(showOverlayImage, overlaySize, readTestData);
+                            template.render(overlaySize, readTestData);
                         },
                     },
                     {
                         id: 'decreaseOverlayOpacity',
                         label: 'Decrease overlay opacity',
                         accelerator: 'CmdOrCtrl+Alt+O',
-                        enabled: isDirectoryOpen && hasOverlayImage,
+                        enabled: isDirectoryOpen && template.hasOverlayImage,
                         click: (menuItem, browserWindow) => {
-                            overlaySize.overlayOpacity -= 0.1
+                            overlaySize.overlayOpacity -= 0.1;
                             overlaySize.overlayOpacity = Math.max(overlaySize.overlayOpacity, 0);
-                            template.render(showOverlayImage, overlaySize, readTestData);
+                            template.render(overlaySize, readTestData);
                         },
                     },
                     {
@@ -679,7 +677,7 @@ const refreshViewMenu = () => {
                         enabled: isDirectoryOpen && currentView.value !== "HTML",
                         click: (menuItem, browserWindow) => {
                             currentView.value = "HTML";
-                            template.render(showOverlayImage, overlaySize, readTestData);
+                            template.render(overlaySize, readTestData);
                             refreshViewMenu();
                             console.log(menuItem.label);
                         },
