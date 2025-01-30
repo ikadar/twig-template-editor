@@ -4,6 +4,7 @@ const fs = require('fs');
 const jsdom = require("jsdom");
 const { JSDOM } = jsdom;
 const Twig = require('twig');
+const { readdir } = require('fs/promises');
 
 class Template {
     constructor(mainWindow) {
@@ -19,6 +20,11 @@ class Template {
             overlayWidth: undefined,
             overlayHeight: undefined,
             overlayOpacity: 0.3  // Default opacity
+        };
+        this.testFiles = {
+            files: ["none"],
+            selectedTestFile: "none",
+            selectedTestFileIndex: 0
         };
     }
 
@@ -47,7 +53,46 @@ class Template {
         return this.showOverlayImage;
     }
 
-    render(readTestData) {
+    async readTestDataFiles() {
+        const testDataDirectory = `${this.directoryPath}/test`;
+        const testDataDirectoryExists = fs.existsSync(testDataDirectory);
+
+        this.testFiles.files = ["none"];
+
+        if (testDataDirectoryExists) {
+            this.testFiles.files = await readdir(testDataDirectory);
+            this.testFiles.files.unshift("none");
+        }
+    }
+
+    selectTestFile(label) {
+        this.testFiles.selectedTestFile = label;
+        this.testFiles.selectedTestFileIndex = this.testFiles.files.indexOf(label);
+    }
+
+    async toggleTestFile() {
+        this.testFiles.selectedTestFileIndex = (this.testFiles.selectedTestFileIndex + 1) % this.testFiles.files.length;
+        this.testFiles.selectedTestFile = this.testFiles.files[this.testFiles.selectedTestFileIndex];
+        return this.testFiles.selectedTestFile;
+    }
+
+    readTestData() {
+        if (!this.testFiles.selectedTestFile || (this.testFiles.selectedTestFile === "none")) {
+            return Promise.resolve({error: null, data: {}});
+        }
+
+        return fs.promises.readFile(`${this.directoryPath}/test/${this.testFiles.selectedTestFile}`, 'utf8')
+            .then(content => ({
+                error: null,
+                data: JSON.parse(content)
+            }))
+            .catch(err => ({
+                error: err,
+                data: null
+            }));
+    }
+
+    render() {
         return JSDOM.fromFile(this.indexPath)
             .then(dom => {
                 const document = dom.window.document;
@@ -86,7 +131,7 @@ class Template {
                     headElement.appendChild(overlayStyles);
                 }
 
-                return readTestData()
+                return this.readTestData()
                     .then(result => result.error ? {} : result.data)
                     .then(testData => {
                         const renderedContent = this.renderTwig(dom.serialize(), testData);

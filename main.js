@@ -37,33 +37,6 @@ app.commandLine.appendSwitch('log-level', '3'); // Suppresses INFO and WARNING l
 
 let mainWindow;
 
-let testFiles = {
-    files: ["none"],
-    selectedTestFile: "none",
-    selectedTestFileIndex: 0,
-    async readTestDataFiles (templateDir) {
-        const testDataDirectory = `${templateDir}/test`;
-        const testDataDirectoryExists = fs.existsSync(testDataDirectory);
-
-        this.files = ["none"];
-
-        if (testDataDirectoryExists) {
-            this.files = await readdir(testDataDirectory);
-            this.files.unshift("none");
-        }
-    },
-    selectTestFile (label) {
-        this.selectedTestFile = label;
-        this.selectedTestFileIndex = this.files.indexOf(label);
-    },
-    async toggleTestFile () {
-        this.selectedTestFileIndex = (this.selectedTestFileIndex + 1) % this.files.length;
-        this.selectedTestFile = this.files[this.selectedTestFileIndex];
-        console.log(this.selectedTestFile);
-        await refreshTestMenu();
-    }
-}
-
 let template;
 
 let currentView = {
@@ -81,7 +54,7 @@ let currentView = {
         refreshViewMenu();
         switch (this.value) {
             case "HTML":
-                template.render(readTestData);
+                template.render();
                 break;
             case "PDF":
                 renderPdf(template.renderedIndexPath);
@@ -361,9 +334,10 @@ const createInitialAppMenuTemplate = () => {
                     label: 'Toggle test',
                     enabled: isDirectoryOpen,
                     accelerator: 'CmdOrCtrl+Alt+M',
-                    click: (menuItem, browserWindow) => {
-                        testFiles.toggleTestFile();
-                        template.render(readTestData);
+                    click: async (menuItem, browserWindow) => {
+                        await template.toggleTestFile();
+                        template.render();
+                        await refreshTestMenu();
                         console.log("TOGGLE TEST");
                     }
                 },
@@ -421,43 +395,24 @@ const openDirectory = (selectedDir) => {
     }
 
     isDirectoryOpen = true;
-    testFiles.selectedTestFile = null;
-    testFiles.selectedTestFileIndex = null;
-
-    return testFiles.readTestDataFiles(template.directoryPath)
+    
+    return template.readTestDataFiles()
         .then(() => refreshTestMenu())
         .then(() => addRecentPath(template.directoryPath))
         .then(() => {
-            template.checkOverlayImage(); // Check for overlay image
-            template.render(readTestData);
+            template.checkOverlayImage();
+            template.render();
             if (!!watcher) {
                 console.log('Stopping the watcher...');
                 watcher.close();
             }
-            watcher = watchDirectory(template.directoryPath, template.indexPath, template.renderedIndexPath);
-
+            watcher = watchDirectory(template.directoryPath);
             refreshViewMenu();
         })
         .catch(err => {
             console.error('Error in openDirectory:', err);
             dialog.showErrorBox('Error', 'Failed to open directory: ' + err.message);
         });
-}
-
-const readTestData = () => {
-    if (!testFiles.selectedTestFile || (testFiles.selectedTestFile === "none")) {
-        return Promise.resolve({error: null, data: {}});
-    }
-
-    return fs.promises.readFile(`${template.directoryPath}/test/${testFiles.selectedTestFile}`, 'utf8')
-        .then(content => ({
-            error: null,
-            data: JSON.parse(content)
-        }))
-        .catch(err => ({
-            error: err,
-            data: null
-        }));
 }
 
 const watchDirectory = (selectedDir) => {
@@ -474,43 +429,36 @@ const watchDirectory = (selectedDir) => {
         depth: Infinity,
     });
 
-    watcher
-        .on('change', (path) => {
-            template.render(readTestData);
-        });
+    watcher.on('change', (path) => {
+        template.render();
+    });
 
     return watcher;
 }
 
 const refreshTestMenu = async () => {
-
     try {
-
-        let newTestSubmenu = testFiles.files.map(file => {
+        let newTestSubmenu = template.testFiles.files.map(file => {
             return {
                 id: `test.${file}`,
                 isTestFile: true,
                 label: file,
                 click: (menuItem) => {
-                    testFiles.selectTestFile(menuItem.label);
-                    template.render(readTestData);
+                    template.selectTestFile(menuItem.label);
+                    template.render();
                 }
             };
         });
 
         updateMenuItem("toggleTest", {enabled: newTestSubmenu.length > 0});
-
         let currentTestSubmenu = getSubmenu("testMenu").filter(item => !item?.isTestFile);
-
         newTestSubmenu = [...newTestSubmenu, ...currentTestSubmenu];
         
         updateMenuItem("testMenu", {
             submenu: newTestSubmenu
         });
-
     
         createAppMenu(appMenuTemplate);
-
     } catch (err) {
         console.error('Error reading directory:', err);
     }
@@ -587,7 +535,7 @@ const refreshViewMenu = () => {
                         enabled: isDirectoryOpen && template.hasOverlayImage,
                         click: (menuItem, browserWindow) => {
                             template.toggleOverlay();
-                            template.render(readTestData);
+                            template.render();
                         },
                     },
                     {
@@ -597,7 +545,7 @@ const refreshViewMenu = () => {
                         enabled: isDirectoryOpen && template.hasOverlayImage,
                         click: (menuItem, browserWindow) => {
                             template.increaseOverlayOpacity();
-                            template.render(readTestData);
+                            template.render();
                         },
                     },
                     {
@@ -607,7 +555,7 @@ const refreshViewMenu = () => {
                         enabled: isDirectoryOpen && template.hasOverlayImage,
                         click: (menuItem, browserWindow) => {
                             template.decreaseOverlayOpacity();
-                            template.render(readTestData);
+                            template.render();
                         },
                     },
                     {
@@ -667,7 +615,7 @@ const refreshViewMenu = () => {
                         enabled: isDirectoryOpen && currentView.value !== "HTML",
                         click: (menuItem, browserWindow) => {
                             currentView.value = "HTML";
-                            template.render(readTestData);
+                            template.render();
                             refreshViewMenu();
                             console.log(menuItem.label);
                         },
