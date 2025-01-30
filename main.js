@@ -45,31 +45,6 @@ let overlaySize = {
     overlayOpacity: CONFIG.DEFAULT_OVERLAY_OPACITY
 }
 
-let currentView = {
-    _value: "HTML",
-    get value() {
-        return this._value;
-    },
-    set value(newValue) {
-        console.log(`View Variable changed: ${this._value} -> ${newValue}`);
-        this._value = newValue;
-        // Do something when the variable changes
-    },
-    toggle(selectedDir, indexPath, renderedIndexPath) {
-        this.value = (this._value === "HTML") ? "PDF" : "HTML";
-        refreshViewMenu(selectedDir, indexPath, renderedIndexPath);
-        switch (this.value) {
-            case "HTML":
-                renderTemplate(selectedDir, indexPath, renderedIndexPath);
-                break;
-            case "PDF":
-                renderPdf(renderedIndexPath);
-                break;
-        }
-        console.log(`Switching to ${this._value} view.`);
-    }
-};
-
 let testFiles = {
     files: ["none"],
     selectedTestFile: "none",
@@ -89,13 +64,45 @@ let testFiles = {
         this.selectedTestFile = label;
         this.selectedTestFileIndex = this.files.indexOf(label);
     },
-    async toggleTestFile (templateDir, indexPath, renderedIndexPath) {
+    async toggleTestFile () {
         this.selectedTestFileIndex = (this.selectedTestFileIndex + 1) % this.files.length;
         this.selectedTestFile = this.files[this.selectedTestFileIndex];
         console.log(this.selectedTestFile);
-        await refreshTestMenu(templateDir, indexPath, renderedIndexPath);
+        await refreshTestMenu();
     }
 }
+
+let template = {
+    directoryPath: null,
+    indexPath: null,
+    renderedIndexPath: null,
+};
+
+let currentView = {
+    _value: "HTML",
+    get value() {
+        return this._value;
+    },
+    set value(newValue) {
+        console.log(`View Variable changed: ${this._value} -> ${newValue}`);
+        this._value = newValue;
+        // Do something when the variable changes
+    },
+    toggle() {
+        this.value = (this._value === "HTML") ? "PDF" : "HTML";
+        refreshViewMenu();
+        switch (this.value) {
+            case "HTML":
+                renderTemplate();
+                break;
+            case "PDF":
+                renderPdf(template.renderedIndexPath);
+                break;
+        }
+        console.log(`Switching to ${this._value} view.`);
+    }
+};
+
 
 app.on('ready', () => {
 
@@ -171,6 +178,52 @@ const createAppMenu = (menuTemplate) => {
     const menu = Menu.buildFromTemplate(appMenuTemplate);
 
     Menu.setApplicationMenu(menu);
+}
+
+/**
+ * Recursively updates a menu item by its unique ID.
+ * @param {string} id - The ID of the menu item to update.
+ * @param {object} updates - An object containing the properties to update.
+ */
+function updateMenuItem(id, updates) {
+    function recursiveUpdate(items) {
+        return items.map(item => {
+            if (item.id === id) {
+                return { ...item, ...updates }; // Shallow merge replaces submenu
+            }
+            if (item.submenu) {
+                return { ...item, submenu: recursiveUpdate(item.submenu) };
+            }
+            return item;
+        });
+    }
+
+    appMenuTemplate = recursiveUpdate(appMenuTemplate);
+    createAppMenu(appMenuTemplate);
+}
+
+/**
+ * Recursively retrieves the submenu array for a menu item by its unique ID.
+ * @param {string} id - The ID of the menu item.
+ * @returns {Array|null} - The submenu array if found, otherwise null.
+ */
+function getSubmenu(id) {
+    function recursiveFind(items) {
+        for (const item of items) {
+            if (item.id === id) {
+                return item.submenu || null;
+            }
+            if (item.submenu) {
+                const found = recursiveFind(item.submenu);
+                if (found) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    return recursiveFind(appMenuTemplate);
 }
 
 const createInitialAppMenuTemplate = () => {
@@ -305,7 +358,28 @@ const createInitialAppMenuTemplate = () => {
         {
             id: 'testMenu',
             label: 'Test',
-            submenu: [],
+            submenu: [
+                {
+                    id: 'test.none',
+                    isTestFile: true,
+                    label: 'None',
+                    click: (menuItem, browserWindow) => {
+                        console.log(menuItem.label);
+                    },
+                },
+                {type: "separator"},
+                {
+                    id: 'toggleTest',
+                    label: 'Toggle test',
+                    enabled: isDirectoryOpen,
+                    accelerator: 'CmdOrCtrl+Alt+M',
+                    click: (menuItem, browserWindow) => {
+                        testFiles.toggleTestFile();
+                        renderTemplate();
+                        console.log("TOGGLE TEST");
+                    }
+                },
+            ],
         },
     ];
 
@@ -348,10 +422,12 @@ const selectDirectory = () => {
 }
 
 const openDirectory = (selectedDir) => {
-    const indexPath = path.join(selectedDir, "index.html");
-    const renderedIndexPath = path.join(selectedDir, "__index.html");
 
-    const exists = fs.existsSync(indexPath);
+    template.directoryPath = selectedDir;
+    template.indexPath = path.join(selectedDir, "index.html");
+    template.renderedIndexPath = path.join(selectedDir, "__index.html");
+
+    const exists = fs.existsSync(template.indexPath);
 
     if (!exists) {
         console.error('index.html not found in the selected directory');
@@ -365,19 +441,19 @@ const openDirectory = (selectedDir) => {
     testFiles.selectedTestFileIndex = null;
 
     // Start promise chain with readTestDataFiles
-    return testFiles.readTestDataFiles(selectedDir)
-        .then(() => refreshTestMenu(selectedDir, indexPath, renderedIndexPath))
-        .then(() => addRecentPath(selectedDir))
+    return testFiles.readTestDataFiles(template.directoryPath)
+        .then(() => refreshTestMenu())
+        .then(() => addRecentPath(template.directoryPath))
         .then(() => {
-            renderTemplate(selectedDir, indexPath, renderedIndexPath);
+            renderTemplate();
             if (!!watcher) {
                 console.log('Stopping the watcher...');
                 watcher.close();
             }
-            watcher = watchDirectory(selectedDir, indexPath, renderedIndexPath);
+            watcher = watchDirectory(template.directoryPath, template.indexPath, template.renderedIndexPath);
 
-            hasOverlayImage = fs.existsSync(`${selectedDir}/img/template-overlay.png`)
-            refreshViewMenu(selectedDir, indexPath, renderedIndexPath);
+            hasOverlayImage = fs.existsSync(`${template.directoryPath}/img/template-overlay.png`)
+            refreshViewMenu(template.directoryPath, template.indexPath, template.renderedIndexPath);
         })
         .catch(err => {
             console.error('Error in openDirectory:', err);
@@ -385,12 +461,12 @@ const openDirectory = (selectedDir) => {
         });
 }
 
-const readTestData = (directoryPath) => {
+const readTestData = () => {
     if (!testFiles.selectedTestFile || (testFiles.selectedTestFile === "none")) {
         return Promise.resolve({error: null, data: {}});
     }
 
-    return fs.promises.readFile(`${directoryPath}/test/${testFiles.selectedTestFile}`, 'utf8')
+    return fs.promises.readFile(`${template.directoryPath}/test/${testFiles.selectedTestFile}`, 'utf8')
         .then(content => ({
             error: null,
             data: JSON.parse(content)
@@ -426,9 +502,10 @@ const renderT = (template, data) => {
     }
 }
 
-const renderTemplate = (directoryPath, indexPath, renderedIndexPath) => {
-    return JSDOM.fromFile(indexPath)
+const renderTemplate = () => {
+    return JSDOM.fromFile(template.indexPath)
         .then(dom => {
+
             const document = dom.window.document;
 
             /////// ADD SCRIPTS
@@ -458,7 +535,7 @@ const renderTemplate = (directoryPath, indexPath, renderedIndexPath) => {
             // Overlay realted scripts
             // ---
 
-            if (showOverlayImage && fs.existsSync(`${directoryPath}/img/template-overlay.png`)) {
+            if (showOverlayImage && fs.existsSync(`${template.directoryPath}/img/template-overlay.png`)) {
                 // Add overlay script with settings
                 const overlaySettingsScript = document.createElement("script");
                 overlaySettingsScript.text = Object.keys(overlaySize).map(key => {
@@ -485,18 +562,18 @@ const renderTemplate = (directoryPath, indexPath, renderedIndexPath) => {
                 headElement.appendChild(overlayStyles);
             }
 
-            return readTestData(directoryPath)
+            return readTestData()
                 .then(result => result.error ? {} : result.data)
                 .then(testData => {
                     const renderedContent = renderT(dom.serialize(), testData);
                     if (!renderedContent) {
                         throw new Error('Failed to render template');
                     }
-                    return writeRenderedHtml(renderedIndexPath, renderedContent);
+                    return writeRenderedHtml(renderedContent);
                 });
         })
         .then(() => {
-            mainWindow.loadFile(renderedIndexPath);
+            mainWindow.loadFile(template.renderedIndexPath);
         })
         .catch(err => {
             console.error('Error rendering template:', err);
@@ -505,11 +582,11 @@ const renderTemplate = (directoryPath, indexPath, renderedIndexPath) => {
         });
 };
 
-const writeRenderedHtml = (renderedIndexPath, renderedContent) => {
-    return fs.promises.writeFile(renderedIndexPath, renderedContent);
+const writeRenderedHtml = (renderedContent) => {
+    return fs.promises.writeFile(template.renderedIndexPath, renderedContent);
 };
 
-const watchDirectory = (selectedDir, indexPath, renderedIndexPath) => {
+const watchDirectory = (selectedDir) => {
 
     console.log('Starting the watcher...');
 
@@ -520,7 +597,7 @@ const watchDirectory = (selectedDir, indexPath, renderedIndexPath) => {
             const parts = path.split('/'); // Split the path into parts
             const isDotted = parts.some((part) => part.startsWith('.')); // Check if any part starts with a dot
 
-            return isDotted || path === renderedIndexPath;
+            return isDotted || path === template.renderedIndexPath;
         },
         persistent: true,         // Keep the process running
         ignoreInitial: true,      // Watch changes immediately
@@ -534,7 +611,7 @@ const watchDirectory = (selectedDir, indexPath, renderedIndexPath) => {
         })
         .on('change', (path) => {
             // console.log(`File changed: ${path}`);
-            renderTemplate(selectedDir, indexPath, renderedIndexPath);
+            renderTemplate();
         })
         .on('unlink', (path) => {
             // console.log(`File removed: ${path}`);
@@ -543,51 +620,34 @@ const watchDirectory = (selectedDir, indexPath, renderedIndexPath) => {
     return watcher;
 }
 
-const refreshTestMenu = async (templateDir, indexPath, renderedIndexPath) => {
+const refreshTestMenu = async () => {
 
     try {
 
-        const newAppMenuTemplate = appMenuTemplate.map(mainMenuItem => {
-            if (mainMenuItem.id === "testMenu") {
-                let menuItem = {
-                    id: "testMenu",
-                    label: "Test",
-                    submenu: testFiles.files.map(file => {
-                        return {
-                            id: `test.${file}`,
-                            label: file,
-                            click: (menuItem) => {
-                                testFiles.selectTestFile(menuItem.label);
-                                // testFiles.selectedTestFile = menuItem.label;
-                                renderTemplate(templateDir, indexPath, renderedIndexPath);
-                                // console.log(menuItem.label);
-                            }
-                        }
-                    })
-                };
-
-                menuItem.submenu.push({
-                    type: "separator"
-                });
-
-                menuItem.submenu.push({
-                    id: 'toggleTest',
-                    label: 'Toggle test',
-                    enabled: isDirectoryOpen,
-                    accelerator: 'CmdOrCtrl+Alt+M',
-                    click: (menuItem, browserWindow) => {
-                        testFiles.toggleTestFile(templateDir, indexPath, renderedIndexPath);
-                        renderTemplate(templateDir, indexPath, renderedIndexPath);
-                        console.log("TOGGLE TEST");
-                    }
-                });
-
-                return menuItem;
-            }
-            return mainMenuItem;
+        let newTestSubmenu = testFiles.files.map(file => {
+            return {
+                id: `test.${file}`,
+                isTestFile: true,
+                label: file,
+                click: (menuItem) => {
+                    testFiles.selectTestFile(menuItem.label);
+                    renderTemplate();
+                }
+            };
         });
 
-        createAppMenu(newAppMenuTemplate);
+        updateMenuItem("toggleTest", {enabled: newTestSubmenu.length > 0});
+
+        let currentTestSubmenu = getSubmenu("testMenu").filter(item => !item?.isTestFile);
+
+        newTestSubmenu = [...newTestSubmenu, ...currentTestSubmenu];
+        
+        updateMenuItem("testMenu", {
+            submenu: newTestSubmenu
+        });
+
+    
+        createAppMenu(appMenuTemplate);
 
     } catch (err) {
         console.error('Error reading directory:', err);
@@ -632,7 +692,7 @@ const refreshOpenRecentMenu = () => {
         });
 }
 
-const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
+const refreshViewMenu = () => {
 
     const newAppMenuTemplate = appMenuTemplate.map(mainMenuItem => {
         if (mainMenuItem.id === "viewMenu") {
@@ -665,7 +725,7 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         enabled: isDirectoryOpen && hasOverlayImage,
                         click: (menuItem, browserWindow) => {
                             showOverlayImage = !showOverlayImage;
-                            renderTemplate(selectedDir, indexPath, renderedIndexPath);
+                            renderTemplate();
                         },
                     },
                     {
@@ -676,7 +736,7 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         click: (menuItem, browserWindow) => {
                             overlaySize.overlayOpacity += 0.1
                             overlaySize.overlayOpacity = Math.min(overlaySize.overlayOpacity, 1);
-                            renderTemplate(selectedDir, indexPath, renderedIndexPath);
+                            renderTemplate();
                         },
                     },
                     {
@@ -687,7 +747,7 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         click: (menuItem, browserWindow) => {
                             overlaySize.overlayOpacity -= 0.1
                             overlaySize.overlayOpacity = Math.max(overlaySize.overlayOpacity, 0);
-                            renderTemplate(selectedDir, indexPath, renderedIndexPath);
+                            renderTemplate();
                         },
                     },
                     {
@@ -736,8 +796,8 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         enabled: isDirectoryOpen && currentView.value !== "PDF",
                         click: (menuItem, browserWindow) => {
                             currentView.value = "PDF";
-                            renderPdf(renderedIndexPath);
-                            refreshViewMenu(selectedDir, indexPath, renderedIndexPath)
+                            renderPdf(template.renderedIndexPath);
+                            refreshViewMenu()
                             console.log(menuItem.label);
                         },
                     },
@@ -747,8 +807,8 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         enabled: isDirectoryOpen && currentView.value !== "HTML",
                         click: (menuItem, browserWindow) => {
                             currentView.value = "HTML";
-                            renderTemplate(selectedDir, indexPath, renderedIndexPath);
-                            refreshViewMenu(selectedDir, indexPath, renderedIndexPath);
+                            renderTemplate();
+                            refreshViewMenu();
                             console.log(menuItem.label);
                         },
                     },
@@ -758,7 +818,7 @@ const refreshViewMenu = (selectedDir, indexPath, renderedIndexPath) => {
                         enabled: isDirectoryOpen,
                         accelerator: 'CmdOrCtrl+Alt+T',
                         click: (menuItem, browserWindow) => {
-                            currentView.toggle(selectedDir, indexPath, renderedIndexPath);
+                            currentView.toggle();
                         },
                     },
 
