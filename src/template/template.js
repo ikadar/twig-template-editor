@@ -6,6 +6,9 @@ const { JSDOM } = jsdom;
 const Twig = require('twig');
 const Overlay = require('./overlay');
 const TestData = require('./test-data');
+const chokidar = require('chokidar');
+const { exec } = require('child_process');
+const os = require('os');
 
 class Template {
     constructor(mainWindow) {
@@ -15,6 +18,7 @@ class Template {
         this.mainWindow = mainWindow;
         this.overlay = new Overlay();
         this.testData = new TestData();
+        this._isDirectoryOpen = false;
     }
 
     updateOverlaySize(newValues) {
@@ -130,6 +134,94 @@ class Template {
 
     hasIndex() {
         return fs.existsSync(this.indexPath);
+    }
+
+    openDirectory(selectedDir) {
+        this.setDirectory(selectedDir);
+
+        if (!this.hasIndex()) {
+            console.error('index.html not found in the selected directory');
+            dialog.showErrorBox('Error', 'No index.html found in the selected directory.');
+            return;
+        }
+
+        this.isDirectoryOpen = true;
+        
+        return this.readTestDataFiles()
+            .then(() => this.appMenu.refreshTestMenu())
+            .then(() => this.appMenu.addRecentPath(this.directoryPath))
+            .then(() => {
+                this.checkOverlayImage();
+                this.render();
+                if (this.watcher) {
+                    console.log('Stopping the watcher...');
+                    this.watcher.close();
+                }
+                this.watcher = this.watchDirectory(this.directoryPath);
+                this.appMenu.refreshViewMenu();
+            })
+            .catch(err => {
+                console.error('Error in openDirectory:', err);
+                dialog.showErrorBox('Error', 'Failed to open directory: ' + err.message);
+            });
+    }
+
+    setAppMenu(appMenu) {
+        this.appMenu = appMenu;
+    }
+
+    get isDirectoryOpen() {
+        return this._isDirectoryOpen || false;
+    }
+
+    set isDirectoryOpen(value) {
+        this._isDirectoryOpen = value;
+    }
+
+    watchDirectory(selectedDir) {
+        console.log('Starting the watcher...');
+
+        const watcher = chokidar.watch(selectedDir, {
+            ignored: (path) => {
+                const parts = path.split('/');
+                const isDotted = parts.some((part) => part.startsWith('.'));
+                return isDotted || path === this.renderedIndexPath;
+            },
+            persistent: true,
+            ignoreInitial: true,
+            depth: Infinity,
+        });
+
+        watcher.on('change', () => {
+            this.render();
+        });
+
+        return watcher;
+    }
+
+    selectDirectory() {
+        dialog.showOpenDialog({
+            properties: ['openDirectory']
+        }).then(result => {
+            if (!result.canceled && result.filePaths.length > 0) {
+                this.openDirectory(result.filePaths[0]);
+            }
+        }).catch(err => {
+            console.error('Error selecting directory:', err);
+            dialog.showErrorBox('Error', 'Failed to select directory: ' + err.message);
+        });
+    }
+
+    renderPdf() {
+        const outputPath = path.join(os.tmpdir(), 'template-editor-output.pdf');
+        exec(`prince -v -j -o '${outputPath}' '${this.renderedIndexPath}'`, (error, stdout, stderr) => {
+            if (error) {
+                console.error('Prince XML is not installed or not in PATH.');
+                return;
+            }
+            console.log(stdout.trim());
+            this.mainWindow.loadFile(outputPath);
+        });
     }
 }
 
