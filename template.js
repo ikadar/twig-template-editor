@@ -13,6 +13,27 @@ class Template {
         this.mainWindow = mainWindow;
         this.hasOverlayImage = false;
         this.showOverlayImage = false;
+        this.overlaySize = {
+            overlayLeft: undefined,
+            overlayTop: undefined,
+            overlayWidth: undefined,
+            overlayHeight: undefined,
+            overlayOpacity: 0.3  // Default opacity
+        };
+    }
+
+    updateOverlaySize(newValues) {
+        this.overlaySize = {...this.overlaySize, ...newValues};
+    }
+
+    increaseOverlayOpacity() {
+        this.overlaySize.overlayOpacity += 0.1;
+        this.overlaySize.overlayOpacity = Math.min(this.overlaySize.overlayOpacity, 1);
+    }
+
+    decreaseOverlayOpacity() {
+        this.overlaySize.overlayOpacity -= 0.1;
+        this.overlaySize.overlayOpacity = Math.max(this.overlaySize.overlayOpacity, 0);
     }
 
     // Add method to check for overlay image
@@ -26,7 +47,7 @@ class Template {
         return this.showOverlayImage;
     }
 
-    render(overlaySize, readTestData) {
+    render(readTestData) {
         return JSDOM.fromFile(this.indexPath)
             .then(dom => {
                 const document = dom.window.document;
@@ -41,8 +62,8 @@ class Template {
                 if (this.showOverlayImage && this.hasOverlayImage) {
                     // Add overlay script with settings
                     const overlaySettingsScript = document.createElement("script");
-                    overlaySettingsScript.text = Object.keys(overlaySize).map(key => {
-                        const value = (typeof overlaySize[key] === "undefined") ? `${overlaySize[key]}` : `"${overlaySize[key]}"`;
+                    overlaySettingsScript.text = Object.keys(this.overlaySize).map(key => {
+                        const value = (typeof this.overlaySize[key] === "undefined") ? `${this.overlaySize[key]}` : `"${this.overlaySize[key]}"`;
                         return `const ${key} = ${value};`
                     }).join("\n");
                     bodyElement.appendChild(overlaySettingsScript);
